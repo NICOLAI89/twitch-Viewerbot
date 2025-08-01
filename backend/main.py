@@ -183,6 +183,7 @@ logger = logging.getLogger(__name__)
 # Parse command line arguments - Do this first!
 parser = argparse.ArgumentParser()
 parser.add_argument('--dev', action='store_true', help='Run in development mode without authentication')
+parser.add_argument('--no-browser', action='store_true', help='Do not automatically open a web browser')
 args = parser.parse_args()
 
 # Load environment variables from .env file
@@ -483,7 +484,8 @@ if __name__ == '__main__':
             logger.info("SSL certificates validated successfully")
             
             from threading import Timer
-            Timer(1.5, open_browser).start()
+            if not args.no_browser:
+                Timer(1.5, open_browser).start()
             
             https_server = WSGIServer(
                 ('0.0.0.0', 443),
@@ -509,7 +511,8 @@ if __name__ == '__main__':
             
             # Open SSL error page once only
             from threading import Timer
-            Timer(1.5, open_ssl_error_page).start()
+            if not args.no_browser:
+                Timer(1.5, open_ssl_error_page).start()
             
             if getattr(sys, 'frozen', False):
                 # Production mode
@@ -528,7 +531,8 @@ if __name__ == '__main__':
         
         # Open browser once only for development mode (normal app, not SSL error page)
         from threading import Timer
-        Timer(1.5, lambda: webbrowser.open('http://localhost:3001/ssl_error.html')).start()
+        if not args.no_browser:
+            Timer(1.5, lambda: webbrowser.open('http://localhost:3001/ssl_error.html')).start()
 
         if getattr(sys, 'frozen', False):
             # Production mode

@@ -80,8 +80,11 @@ A modern web application for generating Twitch views using proxies, built with a
 
 5. Launch the backend:
    ```shell
-   python ./backend/main.py --dev
+   python ./backend/main.py --dev --no-browser
    ```
+   The `--no-browser` flag prevents the backend from automatically launching
+   a browser window. Omit it if you want the app to open your default browser
+   after starting.
 
 ## Docker
 
@@ -102,6 +105,11 @@ Run the container:
 ```sh
 docker run -p 3001:3001 twitch-viewerbot
 ```
+
+By default the container starts in development mode with the `--no-browser` flag,
+so it will not attempt to open a web browser. Open your own browser and visit
+`http://localhost:3001` (or `https://localhost` if certificates are configured)
+to use the interface.
 
 ## Usage
 
