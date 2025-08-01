@@ -103,6 +103,10 @@ Run the container:
 docker run -p 3001:3001 twitch-viewerbot
 ```
 
+The backend accepts a `--no-browser` flag to prevent launching a web browser.
+This flag is included in the container's default command, so the above
+command starts the server without opening a browser.
+
 ## Usage
 
 ### For End Users
