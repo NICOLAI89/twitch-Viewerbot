@@ -18,4 +18,4 @@ COPY backend ./backend
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/out ./backend/static
 EXPOSE 3001 443
-CMD ["python", "./backend/main.py", "--dev"]
+CMD ["python", "./backend/main.py", "--dev", "--no-browser"]

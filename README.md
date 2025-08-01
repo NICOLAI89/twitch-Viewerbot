@@ -103,6 +103,11 @@ Run the container:
 docker run -p 3001:3001 twitch-viewerbot
 ```
 
+By default the container starts in development mode with the `--no-browser` flag,
+so it will not attempt to open a web browser. Open your own browser and visit
+`http://localhost:3001` (or `https://localhost` if certificates are configured)
+to use the interface.
+
 ## Usage
 
 ### For End Users
