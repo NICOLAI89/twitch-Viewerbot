@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_URL = "https://api.velbots.shop";
+// Check the health of the local backend rather than an external service
+const API_URL = ""; // empty prefix means same origin
 
 export function useApiHealth() {
   const [isApiUp, setIsApiUp] = useState(true);

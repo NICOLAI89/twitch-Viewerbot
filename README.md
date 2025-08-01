@@ -78,9 +78,9 @@ A modern web application for generating Twitch views using proxies, built with a
    ./build.sh
    ```
 
-5. Launch the backend:
+5. Launch the backend (add `--no-browser` to prevent automatic browser launch):
    ```shell
-   python ./backend/main.py --dev
+   python ./backend/main.py --dev --no-browser
    ```
 
 ## Docker
@@ -97,18 +97,15 @@ docker build -t twitch-viewerbot .
 
 For Raspberry Pi or other ARM devices use `--platform linux/arm64`.
 
-Run the container:
+Run the container (it starts in headless mode by default):
 
 ```sh
 docker run -p 3001:3001 twitch-viewerbot
 ```
 
-The application will be available at <http://localhost:3001>. Use the
-`--no-browser` option if you're running in a headless environment:
-
-```sh
-docker run -p 3001:3001 twitch-viewerbot --no-browser
-```
+The backend runs with `--dev --no-browser` so no browser window is
+launched. Open <http://localhost:3001> in your own browser to access the
+interface.
 
 ## Usage
 
