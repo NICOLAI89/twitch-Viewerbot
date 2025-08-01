@@ -1,0 +1,7 @@
+.git
+frontend/node_modules
+backend/static
+backend/certs/velbots.shop.key
+backend/certs/velbots.shop.cert
+*.pyc
+__pycache__

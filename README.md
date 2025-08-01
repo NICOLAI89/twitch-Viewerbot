@@ -8,7 +8,8 @@ A modern web application for generating Twitch views using proxies, built with a
 - [Requirements](#requirements)
 - [Installation](#installation)
   - [Standard Installation](#standard-installation)
-  - [Development Installation](#development-installation)
+- [Development Installation](#development-installation)
+- [Docker](#docker)
 - [Usage](#usage)
   - [For End Users](#for-end-users)
   - [For Developers](#for-developers)
@@ -81,6 +82,26 @@ A modern web application for generating Twitch views using proxies, built with a
    ```shell
    python ./backend/main.py --dev
    ```
+
+## Docker
+
+The project includes a `Dockerfile` for building a container image. The image
+uses multi-stage builds so it works on both x86_64 and ARM devices such as the
+Raspberry&nbsp;Pi&nbsp;5.
+
+Build the image:
+
+```sh
+docker build -t twitch-viewerbot .
+```
+
+For Raspberry Pi or other ARM devices use `--platform linux/arm64`.
+
+Run the container:
+
+```sh
+docker run -p 3001:3001 twitch-viewerbot
+```
 
 ## Usage
 
