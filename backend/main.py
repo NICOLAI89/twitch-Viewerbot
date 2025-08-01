@@ -9,6 +9,7 @@ import jwt
 from dotenv import load_dotenv
 import webbrowser
 from api import api
+from api.app import health_api
 from gevent.pywsgi import WSGIServer
 import argparse
 import platform
@@ -22,13 +23,15 @@ if platform.system() != "Windows":
 else:
     resource = None
 
+
 def get_env_path():
     """Get the correct path for .env file in both dev and PyInstaller environments"""
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         bundle_dir = sys._MEIPASS
-        return os.path.join(bundle_dir, '.env')
+        return os.path.join(bundle_dir, ".env")
     else:
-        return os.path.join(os.path.dirname(__file__), '.env')
+        return os.path.join(os.path.dirname(__file__), ".env")
+
 
 def check_certificate_expiry(cert_path):
     """
@@ -39,57 +42,59 @@ def check_certificate_expiry(cert_path):
         if not os.path.exists(cert_path):
             logger.warning(f"Certificate not found at {cert_path}")
             return False
-            
+
         # Use OpenSSL directly to check certificate expiry
         try:
             import OpenSSL.crypto as crypto
-            with open(cert_path, 'rb') as f:
+
+            with open(cert_path, "rb") as f:
                 cert_data = f.read()
-            
+
             cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
-            expiry = cert.get_notAfter().decode('ascii')
-            
-            expiry_date = datetime.datetime.strptime(expiry, '%Y%m%d%H%M%SZ')
+            expiry = cert.get_notAfter().decode("ascii")
+
+            expiry_date = datetime.datetime.strptime(expiry, "%Y%m%d%H%M%SZ")
             now = datetime.datetime.now()
-            
+
             days_remaining = (expiry_date - now).days
             logger.info(f"Certificate expires in {days_remaining} days")
-            
+
             return days_remaining > 7
         except ImportError:
             # Fall back to a simpler check if OpenSSL is not available
             logger.warning("OpenSSL not available, using simplified certificate check")
             # Check if the certificate file exists and is not empty
             return os.path.getsize(cert_path) > 0
-        
+
     except Exception as e:
         logger.error(f"Error checking certificate expiry: {str(e)}")
         return False
+
 
 def fetch_certificate():
     """
     Directly download the SSL certificate files from the API
     """
-    cert_dir = os.path.join(os.path.dirname(__file__), 'certs')
-    cert_path = os.path.join(cert_dir, 'velbots.shop.cert')
-    key_path = os.path.join(cert_dir, 'velbots.shop.key')
-    
+    cert_dir = os.path.join(os.path.dirname(__file__), "certs")
+    cert_path = os.path.join(cert_dir, "velbots.shop.cert")
+    key_path = os.path.join(cert_dir, "velbots.shop.key")
+
     # Ensure the certificates directory exists
     if not os.path.exists(cert_dir):
         os.makedirs(cert_dir)
-    
+
     try:
         # Create backups if certificates already exist
         if os.path.exists(cert_path):
             shutil.copy2(cert_path, f"{cert_path}.backup")
         if os.path.exists(key_path):
             shutil.copy2(key_path, f"{key_path}.backup")
-            
+
         # Directly download the certificate
         logger.info("Downloading certificate from API...")
-        
+
         try:
-            
+
             # Download certificate
             certificate_url = "https://api.velbots.shop/auth/certificate"
             urllib.request.urlretrieve(certificate_url, cert_path)
@@ -98,26 +103,34 @@ def fetch_certificate():
             key_url = "https://api.velbots.shop/auth/certificate/key"
             urllib.request.urlretrieve(key_url, key_path)
             logger.info("Private key downloaded successfully")
-            
+
             # Verify that both files exist and are not empty
-            if os.path.exists(cert_path) and os.path.exists(key_path) and \
-               os.path.getsize(cert_path) > 0 and os.path.getsize(key_path) > 0:
-                
+            if (
+                os.path.exists(cert_path)
+                and os.path.exists(key_path)
+                and os.path.getsize(cert_path) > 0
+                and os.path.getsize(key_path) > 0
+            ):
+
                 # Additional validation: check if cert and key match
                 try:
                     ssl_context = ssl.create_default_context()
                     ssl_context.load_cert_chain(cert_path, key_path)
-                    logger.info("Certificate and key files successfully downloaded and validated - they match!")
+                    logger.info(
+                        "Certificate and key files successfully downloaded and validated - they match!"
+                    )
                     return True
                 except ssl.SSLError as ssl_error:
-                    logger.error(f"❌ SSL VALIDATION FAILED: Certificate and private key do not match!")
+                    logger.error(
+                        f"❌ SSL VALIDATION FAILED: Certificate and private key do not match!"
+                    )
                     logger.error(f"SSL Error details: {ssl_error}")
-                    print("\n" + "="*60)
+                    print("\n" + "=" * 60)
                     print("🚨 CRITICAL SSL ERROR 🚨")
-                    print("="*60)
+                    print("=" * 60)
                     print("The downloaded certificate and private key DO NOT MATCH!")
                     print("This will prevent HTTPS from working properly.")
-                    print("="*60 + "\n")
+                    print("=" * 60 + "\n")
                     return False
                 except Exception as validation_error:
                     logger.error(f"Certificate validation error: {validation_error}")
@@ -125,10 +138,10 @@ def fetch_certificate():
             else:
                 logger.error("Downloaded certificate or key files are empty")
                 return False
-            
+
         except Exception as download_error:
             logger.error(f"Error downloading certificate files: {str(download_error)}")
-            
+
             try:
                 # Restore backups if they exist
                 if os.path.exists(f"{cert_path}.backup"):
@@ -139,36 +152,46 @@ def fetch_certificate():
                     logger.info("Restored key backup")
                 return os.path.exists(cert_path) and os.path.exists(key_path)
             except Exception as backup_error:
-                logger.error(f"Error restoring backup certificates: {str(backup_error)}")
-            
+                logger.error(
+                    f"Error restoring backup certificates: {str(backup_error)}"
+                )
+
             return False
-            
+
     except Exception as e:
         logger.error(f"Unexpected error in fetch_certificate: {str(e)}")
 
         return False
+
 
 def ensure_valid_certificates():
     """
     Ensures that valid certificates are available
     Checks expiry and retrieves new certificates if needed
     """
-    cert_path = os.path.join(os.path.dirname(__file__), 'certs', 'velbots.shop.cert')
-    key_path = os.path.join(os.path.dirname(__file__), 'certs', 'velbots.shop.key')
-    
+    cert_path = os.path.join(os.path.dirname(__file__), "certs", "velbots.shop.cert")
+    key_path = os.path.join(os.path.dirname(__file__), "certs", "velbots.shop.key")
+
     # If certificates don't exist or are expired, retrieve new ones
-    if not os.path.exists(cert_path) or not os.path.exists(key_path) or not check_certificate_expiry(cert_path):
+    if (
+        not os.path.exists(cert_path)
+        or not os.path.exists(key_path)
+        or not check_certificate_expiry(cert_path)
+    ):
         logger.warning("Certificates missing or expired, fetching new ones")
         # Ajouter un délai aléatoire pour éviter que tous les clients ne demandent en même temps
-        time.sleep(0.5 + (datetime.datetime.now().microsecond / 1000000))  # 0.5-1.5 secondes
+        time.sleep(
+            0.5 + (datetime.datetime.now().microsecond / 1000000)
+        )  # 0.5-1.5 secondes
         return fetch_certificate()
     else:
         logger.info("Certificates are valid and up to date")
-    
+
     return True
 
+
 # Modify logging configuration
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     # Running in PyInstaller bundle (production)
     logging.getLogger().setLevel(logging.CRITICAL)  # Only show errors
     logging.getLogger("urllib3").setLevel(logging.CRITICAL)
@@ -182,7 +205,12 @@ logger = logging.getLogger(__name__)
 
 # Parse command line arguments - Do this first!
 parser = argparse.ArgumentParser()
-parser.add_argument('--dev', action='store_true', help='Run in development mode without authentication')
+parser.add_argument(
+    "--dev", action="store_true", help="Run in development mode without authentication"
+)
+parser.add_argument(
+    "--no-browser", action="store_true", help="Run without launching a web browser"
+)
 args = parser.parse_args()
 
 # Load environment variables from .env file
@@ -192,54 +220,60 @@ load_dotenv(env_path)
 # Only check for JWT_SECRET if not in dev mode
 JWT_SECRET = None
 if not args.dev:
-    JWT_SECRET = os.getenv('JWT_SECRET')
+    JWT_SECRET = os.getenv("JWT_SECRET")
     if not JWT_SECRET:
-        logger.error(f"JWT_SECRET not found in environment variables. Env path: {env_path}")
+        logger.error(
+            f"JWT_SECRET not found in environment variables. Env path: {env_path}"
+        )
         if os.path.exists(env_path):
-            with open(env_path, 'r') as f:
+            with open(env_path, "r") as f:
                 logger.info(f"Env file contents: {f.read()}")
         raise ValueError("JWT_SECRET must be set in environment variables")
 else:
     # In dev mode, use a dummy secret
-    JWT_SECRET = 'dev_secret_key'
+    JWT_SECRET = "dev_secret_key"
     logger.warning("Running in development mode - Using dummy JWT secret")
 
-app = Flask(__name__, static_folder='static')
-app.config['JWT_SECRET'] = JWT_SECRET
+app = Flask(__name__, static_folder="static")
+app.config["JWT_SECRET"] = JWT_SECRET
 
 # Simplified CORS configuration
-CORS(app, 
-     resources={
-         r"/*": {
-             "origins": ["http://localhost:3000", "http://localhost:3001", "https://velbots.shop"],
-             "methods": ["GET", "POST", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization"],
-             "supports_credentials": True
-         }
-     })
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": [
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "https://velbots.shop",
+            ],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True,
+        }
+    },
+)
 
 # Register the API blueprint
-app.register_blueprint(api, url_prefix='/api')
+app.register_blueprint(api, url_prefix="/api")
+app.register_blueprint(health_api)
+
 
 def verify_token(token):
     try:
         # Add leeway parameter to handle time differences
-        jwt.decode(
-            token, 
-            app.config['JWT_SECRET'], 
-            algorithms=["HS256"],
-            leeway=5
-        )
+        jwt.decode(token, app.config["JWT_SECRET"], algorithms=["HS256"], leeway=5)
         return True
     except jwt.InvalidTokenError as e:
         logger.error(f"Token verification failed: {e}")
         return False
 
+
 def auth_middleware(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # Skip authentication if in dev mode
-        if getattr(parser.parse_args(), 'dev', False):
+        if getattr(parser.parse_args(), "dev", False):
             return f(*args, **kwargs)
 
         path = request.path
@@ -247,71 +281,76 @@ def auth_middleware(f):
 
         # Liste des ressources statiques à ignorer
         static_resources = [
-            'favicon.ico',
-            '.js',
-            '.css',
-            '.png',
-            '.jpg',
-            '.jpeg',
-            '.gif',
-            '.svg',
-            '.woff',
-            '.woff2',
-            '.ttf',
-            '.eot'
+            "favicon.ico",
+            ".js",
+            ".css",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".eot",
         ]
-        
+
         # Vérifier si c'est une ressource statique
-        is_static = any(path.endswith(ext) for ext in static_resources) or \
-                   path.startswith(('/api/', '/_next/', '/static/', '/images/'))
-                   
+        is_static = any(
+            path.endswith(ext) for ext in static_resources
+        ) or path.startswith(("/api/", "/_next/", "/static/", "/images/"))
+
         if is_static:
             return f(*args, **kwargs)
 
         # Get token and check authentication
-        token = request.cookies.get('access_token')
+        token = request.cookies.get("access_token")
         is_authenticated = token and verify_token(token)
         logger.info(f"Is authenticated: {is_authenticated}")
 
         # Si l'utilisateur est authentifié et essaie d'accéder à login/register
-        if is_authenticated and path in ['/login', '/register']:
+        if is_authenticated and path in ["/login", "/register"]:
             logger.info("Redirecting authenticated user from login/register to home")
-            return redirect('/')
+            return redirect("/")
 
         # Check if path should bypass auth
-        is_public_path = path in ['/login', '/register', '/ssl_error.html']
+        is_public_path = path in ["/login", "/register", "/ssl_error.html"]
         if is_public_path and not is_authenticated:
             return f(*args, **kwargs)
 
         # If not authenticated and not a public path, redirect to login
         if not is_authenticated:
             logger.info("Redirecting to login - not authenticated")
-            return redirect('/login')
+            return redirect("/login")
 
         return f(*args, **kwargs)
+
     return decorated_function
 
-@app.route('/login')
+
+@app.route("/login")
 @auth_middleware  # Ajouter le middleware ici
 def serve_login():
     # If you have a login.html in static/
-    login_file = os.path.join(app.static_folder, 'login.html')
+    login_file = os.path.join(app.static_folder, "login.html")
     logger.info(f"Login file path: {login_file}")
     if os.path.exists(login_file):
         return send_file(login_file)
     return abort(404)
 
-@app.route('/register')
+
+@app.route("/register")
 @auth_middleware  # Ajouter le middleware ici
 def serve_register():
     # If you have a register.html in static/
-    register_file = os.path.join(app.static_folder, 'register.html')
+    register_file = os.path.join(app.static_folder, "register.html")
     logger.info(f"Register file path: {register_file}")
     if os.path.exists(register_file):
         return send_file(register_file)
     return abort(404)
 
-@app.route('/ssl_error.html')
+
+@app.route("/ssl_error.html")
 def serve_ssl_error():
     """Serve the SSL error page without authentication - generated dynamically"""
     error_html = """
@@ -413,37 +452,48 @@ def serve_ssl_error():
     """
     return error_html
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
 @auth_middleware  # Optional if you still want to protect routes
 def serve_frontend(path):
     # Return the static files from the "static" folder
     if not path:
-        path = 'index.html'
+        path = "index.html"
     full_path = os.path.join(app.static_folder, path)
     if os.path.exists(full_path) and os.path.isfile(full_path):
         return send_file(full_path)
     # Fallback to serving index.html
-    return send_file(os.path.join(app.static_folder, 'index.html'))
+    return send_file(os.path.join(app.static_folder, "index.html"))
+
 
 @app.after_request
 def after_request(response):
-    origin = request.headers.get('Origin')
-    if origin in ["http://localhost:3000", "http://localhost:3001", "https://velbots.shop"]:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+    origin = request.headers.get("Origin")
+    if origin in [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://velbots.shop",
+    ]:
+        response.headers.add("Access-Control-Allow-Origin", origin)
+        response.headers.add(
+            "Access-Control-Allow-Headers", "Content-Type, Authorization"
+        )
+        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        response.headers.add("Access-Control-Allow-Credentials", "true")
     return response
+
 
 def open_browser():
     print("Opening browser...")
-    webbrowser.open('https://velbots.shop')
+    webbrowser.open("https://velbots.shop")
+
 
 def open_ssl_error_page():
     """Open the SSL error page in browser"""
     print("Opening SSL error page...")
-    webbrowser.open('http://localhost:3001/ssl_error.html')
+    webbrowser.open("http://localhost:3001/ssl_error.html")
+
 
 def set_resource_limits():
     # Vérifier si le module resource est disponible (systèmes Unix/Linux/macOS)
@@ -455,13 +505,14 @@ def set_resource_limits():
         # Sur Windows, cette fonction ne fait rien
         logger.info("Resource limits adjustment not supported on Windows")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     set_resource_limits()
     # Create uploads directory if it doesn't exist
-    uploads_dir = os.path.join(os.path.dirname(app.instance_path), 'uploads')
+    uploads_dir = os.path.join(os.path.dirname(app.instance_path), "uploads")
     if not os.path.exists(uploads_dir):
         os.makedirs(uploads_dir)
-        
+
     logger.info(f"Static folder path: {os.path.abspath(app.static_folder)}")
     if not os.path.exists(app.static_folder):
         logger.error(f"Static folder not found: {app.static_folder}")
@@ -469,9 +520,9 @@ if __name__ == '__main__':
 
     if args.dev:
         logger.warning("Running in development mode - Authentication disabled")
-    
-    CERT_PATH = os.path.join(os.path.dirname(__file__), 'certs', 'velbots.shop.cert')
-    KEY_PATH = os.path.join(os.path.dirname(__file__), 'certs', 'velbots.shop.key')
+
+    CERT_PATH = os.path.join(os.path.dirname(__file__), "certs", "velbots.shop.cert")
+    KEY_PATH = os.path.join(os.path.dirname(__file__), "certs", "velbots.shop.key")
 
     cert_status = ensure_valid_certificates()
 
@@ -481,58 +532,68 @@ if __name__ == '__main__':
             ssl_context = ssl.create_default_context()
             ssl_context.load_cert_chain(CERT_PATH, KEY_PATH)
             logger.info("SSL certificates validated successfully")
-            
-            from threading import Timer
-            Timer(1.5, open_browser).start()
-            
+
+            if not args.no_browser:
+                from threading import Timer
+
+                Timer(1.5, open_browser).start()
+
             https_server = WSGIServer(
-                ('0.0.0.0', 443),
+                ("0.0.0.0", 443),
                 app,
                 certfile=CERT_PATH,
                 keyfile=KEY_PATH,
-                log=None  # Disable WSGIServer logs in production
+                log=None,  # Disable WSGIServer logs in production
             )
             logger.info("Starting HTTPS on port 443")
             https_server.serve_forever()
         except ssl.SSLError as e:
             logger.error(f"SSL certificate validation failed: {e}")
             logger.warning("Certificate and key don't match, falling back to HTTP mode")
-            
-            print("\n" + "="*60)
+
+            print("\n" + "=" * 60)
             print("🚨 SSL CERTIFICATE ERROR - FALLBACK MODE 🚨")
-            print("="*60)
+            print("=" * 60)
             print("HTTPS server cannot start due to SSL certificate issues.")
             print("The application is running in HTTP fallback mode on port 3001.")
             print("Access the application at: http://localhost:3001")
             print("Opening SSL error page in browser...")
-            print("="*60 + "\n")
-            
+            print("=" * 60 + "\n")
+
             # Open SSL error page once only
-            from threading import Timer
-            Timer(1.5, open_ssl_error_page).start()
-            
-            if getattr(sys, 'frozen', False):
+            if not args.no_browser:
+                from threading import Timer
+
+                Timer(1.5, open_ssl_error_page).start()
+
+            if getattr(sys, "frozen", False):
                 # Production mode
-                app.run(debug=False, host='0.0.0.0', port=3001)
+                app.run(debug=False, host="0.0.0.0", port=3001)
             else:
                 # Development mode
-                app.run(debug=True, host='0.0.0.0', port=3001)
+                app.run(debug=True, host="0.0.0.0", port=3001)
     else:
-        logger.warning("SSL certificates not found or invalid, running in development mode")
-        print("\n" + "="*50)
+        logger.warning(
+            "SSL certificates not found or invalid, running in development mode"
+        )
+        print("\n" + "=" * 50)
         print("🔧 DEVELOPMENT MODE - No SSL certificates")
-        print("="*50)
+        print("=" * 50)
         print("Running in HTTP mode on port 3001")
         print("Access the application at: http://localhost:3001")
-        print("="*50 + "\n")
-        
-        # Open browser once only for development mode (normal app, not SSL error page)
-        from threading import Timer
-        Timer(1.5, lambda: webbrowser.open('http://localhost:3001/ssl_error.html')).start()
+        print("=" * 50 + "\n")
 
-        if getattr(sys, 'frozen', False):
+        # Open browser once only for development mode (normal app, not SSL error page)
+        if not args.no_browser:
+            from threading import Timer
+
+            Timer(
+                1.5, lambda: webbrowser.open("http://localhost:3001/ssl_error.html")
+            ).start()
+
+        if getattr(sys, "frozen", False):
             # Production mode
-            app.run(debug=False, host='0.0.0.0', port=3001)
+            app.run(debug=False, host="0.0.0.0", port=3001)
         else:
             # Development mode
-            app.run(debug=True, host='0.0.0.0', port=3001)
+            app.run(debug=True, host="0.0.0.0", port=3001)
