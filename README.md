@@ -103,6 +103,13 @@ Run the container:
 docker run -p 3001:3001 twitch-viewerbot
 ```
 
+The application will be available at <http://localhost:3001>. Use the
+`--no-browser` option if you're running in a headless environment:
+
+```sh
+docker run -p 3001:3001 twitch-viewerbot --no-browser
+```
+
 ## Usage
 
 ### For End Users
